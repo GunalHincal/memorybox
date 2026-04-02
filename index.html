@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MemoryBox — Anılarınız, anında herkesin elinde</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+
+<!-- File input: supports both images and videos -->
+<input type="file" id="fileInput" class="hidden" accept="image/*,video/*" multiple>
+
+<!-- Upload progress bar -->
+<div class="upload-bar hidden" id="uploadBar">
+  <div class="upload-bar-inner">
+    <div class="upload-bar-track"><div class="upload-bar-fill" id="uploadFill"></div></div>
+    <div class="upload-bar-label" id="uploadLabel">Yükleniyor...</div>
+  </div>
+</div>
+
+<!-- Download Quality Sheet -->
+<div class="dl-sheet hidden" id="dlSheet">
+  <div class="dl-bg" onclick="closeDlSheet()"></div>
+  <div class="dl-card">
+    <div class="dl-handle"></div>
+    <div class="dl-title" id="dlSheetTitle">İndir</div>
+
+    <div class="dl-opt" onclick="confirmDownload('original')">
+      <div class="dl-opt-icon">📦</div>
+      <div>
+        <div class="dl-opt-label">Orijinal Kalite</div>
+        <div class="dl-opt-sub">Yüklenen dosyanın tam kalitesi — sıkıştırma yok</div>
+      </div>
+      <div class="dl-opt-arrow">↓</div>
+    </div>
+
+    <div class="dl-opt" id="dlCompressedOpt" onclick="confirmDownload('compressed')">
+      <div class="dl-opt-icon">🗜️</div>
+      <div>
+        <div class="dl-opt-label">Sıkıştırılmış</div>
+        <div class="dl-opt-sub">Daha küçük dosya — maks 1920px, %78 kalite</div>
+      </div>
+      <div class="dl-opt-arrow">↓</div>
+    </div>
+
+    <button class="dl-cancel" onclick="closeDlSheet()">İptal</button>
+  </div>
+</div>
+
+<!-- Supabase CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
