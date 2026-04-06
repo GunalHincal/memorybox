@@ -470,6 +470,24 @@ input.shake { animation:shake 0.3s ease; border-color:var(--danger) !important; 
 ::-webkit-scrollbar { display:none; }
 
 /* ═══════════════════════════════════════════
+   IDENTITY CARD
+══════════════════════════════════════════ */
+.identity-card {
+  display:flex; align-items:center; gap:14px;
+  background:rgba(249,115,22,0.08); border:1.5px solid rgba(249,115,22,0.25);
+  border-radius:18px; padding:16px 20px; cursor:pointer;
+  transition:all 0.2s; touch-action:manipulation;
+}
+.identity-card:active { transform:scale(0.98); background:rgba(249,115,22,0.14); }
+.identity-avatar {
+  width:44px; height:44px; border-radius:50%;
+  background:var(--gradient); color:white;
+  font-size:18px; font-weight:800; font-family:'Outfit',sans-serif;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+
+/* ═══════════════════════════════════════════
    THREE DOT MENU
 ══════════════════════════════════════════ */
 .ev-menu-btn {
