@@ -268,15 +268,29 @@ input.shake { animation:shake 0.3s ease; border-color:var(--danger) !important; 
 .fab-wrap {
   position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
   z-index:100; animation:slideUp 0.5s ease 0.3s both;
+  display:flex; gap:10px; justify-content:center; align-items:center;
+  flex-wrap:nowrap;
+  max-width:calc(100vw - 32px);
 }
 .fab {
   background:var(--gradient); border:none; color:white;
-  padding:16px 28px; border-radius:50px; cursor:pointer;
-  font-size:14px; font-weight:700; font-family:inherit;
-  display:flex; align-items:center; gap:8px;
+  padding:15px 20px; border-radius:50px; cursor:pointer;
+  font-size:13px; font-weight:700; font-family:inherit;
+  display:flex; align-items:center; gap:6px;
   box-shadow:0 8px 32px var(--accent-glow);
+  white-space:nowrap; flex-shrink:0;
+  touch-action:manipulation;
 }
 .fab:active { transform:scale(0.95); }
+.fab-icon {
+  background:rgba(255,255,255,0.13); border:none; color:white;
+  width:52px; height:52px; border-radius:50px; cursor:pointer;
+  font-size:18px; font-weight:700; font-family:inherit;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 16px rgba(0,0,0,0.3);
+  touch-action:manipulation; flex-shrink:0;
+}
+.fab-icon:active { transform:scale(0.92); }
 
 /* ═══════════════════════════════════════════
    QR PANEL
@@ -479,6 +493,9 @@ input.shake { animation:shake 0.3s ease; border-color:var(--danger) !important; 
   transition:all 0.2s; touch-action:manipulation;
 }
 .identity-card:active { transform:scale(0.98); background:rgba(249,115,22,0.14); }
+.identity-card.identity-host {
+  background:rgba(249,115,22,0.14); border-color:var(--accent);
+}
 .identity-avatar {
   width:44px; height:44px; border-radius:50%;
   background:var(--gradient); color:white;
