@@ -48,6 +48,8 @@ const L = {
     deleted:'Etkinlik silindi!', shareText:'MemoryPocket\'ta "{name}" etkinliğine katılmak için kod: {code}\n🔗 https://memorypocket.vercel.app',
     deleteMediaConfirm:'Bu medyayı silmek istediğinden emin misin?',
     mediaDeleted:'Silindi ✓', deleteMedia:'Sil', organizer:'Organizatör',
+    continueAs:'Bu kişi olarak devam et', joinDiffName:'Farklı bir isimle katıl',
+    joinAsNew:'Bu isimle katıl', sameNameHint:'Farklı cihazlardan aynı ismi kullanarak aynı kişi olarak görünürsün.',
   },
   en: {
     appName:'MemoryPocket', tagline:'Every moment from your event, in one box',
@@ -83,6 +85,8 @@ const L = {
     deleted:'Event deleted!', shareText:'Join "{name}" on MemoryPocket! Code: {code}\n🔗 https://memorypocket.vercel.app',
     deleteMediaConfirm:'Are you sure you want to delete this media?',
     mediaDeleted:'Deleted ✓', deleteMedia:'Delete', organizer:'Organizer',
+    continueAs:'Continue as this person', joinDiffName:'Join with a different name',
+    joinAsNew:'Join with this name', sameNameHint:'Use the same name on any device to appear as the same person.',
   }
 };
 
@@ -462,6 +466,57 @@ function dlAll() {
 }
 
 /* ════════════════════════════════════════════
+   LIGHTBOX OVERLAY (no full re-render)
+════════════════════════════════════════════ */
+function openLightbox(idx) {
+  S.lbIdx = idx;
+  _renderLightbox();
+}
+
+function _renderLightbox() {
+  const all = S.photos;
+  const u = user();
+  document.getElementById('lb-overlay')?.remove();
+  if (S.lbIdx < 0 || !all[S.lbIdx]) return;
+
+  const p = all[S.lbIdx], me = p.user === u, n = all.length;
+  const isVideo = p.fileType === 'video';
+  const media = isVideo
+    ? `<video src="${p.url}" controls playsinline style="max-width:92%;max-height:65vh;border-radius:12px" onclick="event.stopPropagation()"></video>`
+    : `<img src="${p.url}" style="max-width:92%;max-height:65vh;border-radius:12px;object-fit:contain" onclick="event.stopPropagation()" draggable="false">`;
+
+  const div = document.createElement('div');
+  div.id = 'lb-overlay';
+  div.className = 'lightbox';
+  div.innerHTML = `
+    <button class="lb-close" onclick="closeLightbox()">×</button>
+    <div class="lb-counter">${S.lbIdx+1} / ${n}</div>
+    ${media}
+    <div class="lb-info">
+      <div style="font-size:14px;font-weight:600">${me?'📱 ':''}${esc(p.user)}${me?` <span class="badge badge-you">${t('you')}</span>`:''}</div>
+      <div style="font-size:12px;margin-top:4px;opacity:.7">${isVideo?'🎬 Video · ':''}${ago(p.ts)}</div>
+    </div>
+    <div class="lb-nav">
+      ${S.lbIdx>0?`<button class="btn-small" onclick="lbNav(-1)">←</button>`:''}
+      <button class="dl-btn" onclick="event.stopPropagation();dlOne(${S.lbIdx})">⬇ ${t('dlOne')}</button>
+      ${me?`<button class="btn-small" style="background:rgba(239,68,68,0.2);color:#ef4444" onclick="event.stopPropagation();deleteMedia('${p.id}')">🗑 ${t('deleteMedia')}</button>`:''}
+      ${S.lbIdx<n-1?`<button class="btn-small" onclick="lbNav(1)">→</button>`:''}
+    </div>`;
+  div.addEventListener('click', (e) => { if (e.target === div) closeLightbox(); });
+  document.body.appendChild(div);
+}
+
+function closeLightbox() {
+  S.lbIdx = -1;
+  document.getElementById('lb-overlay')?.remove();
+}
+
+function lbNav(dir) {
+  S.lbIdx += dir;
+  _renderLightbox();
+}
+
+/* ════════════════════════════════════════════
    RENDER ENGINE
 ════════════════════════════════════════════ */
 let _rafId = null;
@@ -613,6 +668,7 @@ function pgJoin() {
 /* ── JOIN NAME ── */
 function pgJoinName() {
   const ev = S.eventData;
+  const saved = getSavedName();
   return `<div class="page" style="padding:20px 24px">
     <button class="btn-back" onclick="nav('join')">← ${t('back')}</button>
     <div style="text-align:center;margin:32px 0">
@@ -620,11 +676,33 @@ function pgJoinName() {
       <h2 style="font-size:22px;font-weight:800;font-family:'Outfit',sans-serif;margin-bottom:6px">${esc(ev?.name||'')}</h2>
       <div style="font-size:13px;color:var(--accent);font-weight:600">${S.code}</div>
     </div>
-    <div style="margin-bottom:24px">
-      <label class="label">${t('yourName')}</label>
-      <input type="text" id="iu" value="${esc(S.uName)}" placeholder="${t('yourNamePH')}" oninput="S.uName=this.value">
-    </div>
-    <button class="btn-primary" onclick="enterGuest()">${t('join')} →</button>
+    ${saved ? `
+      <div class="identity-card" onclick="S.uName='${esc(saved)}';enterGuest()">
+        <div class="identity-avatar">${saved.charAt(0).toUpperCase()}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(saved)}</div>
+          <div style="font-size:11px;color:var(--text-soft);margin-top:2px">${t('continueAs')}</div>
+        </div>
+        <div style="color:var(--accent);font-size:18px;font-weight:700">→</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;color:var(--text-soft);font-size:12px;margin:16px 0">
+        <div style="flex:1;height:1px;background:var(--card-border)"></div>
+        <span>${t('or')}</span>
+        <div style="flex:1;height:1px;background:var(--card-border)"></div>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="label">${t('joinDiffName')}</label>
+        <input type="text" id="iu" value="" placeholder="${t('yourNamePH')}" oninput="S.uName=this.value">
+      </div>
+      <button class="btn-secondary" style="margin-top:8px" onclick="if(document.getElementById('iu').value.trim()){S.uName=document.getElementById('iu').value.trim();enterGuest();}">${t('joinAsNew')}</button>
+    ` : `
+      <div style="margin-bottom:8px">
+        <label class="label">${t('yourName')}</label>
+        <input type="text" id="iu" value="${esc(S.uName)}" placeholder="${t('yourNamePH')}" oninput="S.uName=this.value">
+      </div>
+      <div style="font-size:11px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">💡 ${t('sameNameHint')}</div>
+      <button class="btn-primary" onclick="if(S.uName.trim())enterGuest()">${t('join')} →</button>
+    `}
   </div>`;
 }
 
@@ -666,12 +744,12 @@ function pgGallery() {
     </div>`;
 
     if (S.selectMode) {
-      return `<div class="photo-card sel-mode ${chosen?'chosen':''} ${p._new?'fresh':''}" style="${stg(i)}" onclick="toggleSel('${p.id}')">
+      return `<div class="photo-card sel-mode ${chosen?'chosen':''} ${p._new?'fresh':''}" data-id="${p.id}" style="${stg(i)}" onclick="toggleSel('${p.id}')">
         <div class="sel-check ${chosen?'on':''}">${chosen?'✓':''}</div>
         ${thumb}${overlay}
       </div>`;
     }
-    return `<div class="photo-card ${p._new?'fresh':''}" style="${stg(i)}" onclick="S.lbIdx=${idx};render()">
+    return `<div class="photo-card ${p._new?'fresh':''}" data-id="${p.id}" style="${stg(i)}" onclick="openLightbox(${idx})">
       ${thumb}${overlay}
       ${me ? `<button class="del-btn" onclick="event.stopPropagation();deleteMedia('${p.id}')" title="Sil">🗑</button>` : ''}
     </div>`;
@@ -695,37 +773,17 @@ function pgGallery() {
     <div class="masonry-col">${c2.map(pc).join('')}</div>
   </div>` : '';
 
-  const lb = S.lbIdx >= 0 && all[S.lbIdx] ? (() => {
-    const p = all[S.lbIdx], me = p.user===u, n = all.length;
-    const isVideo = p.fileType==='video';
-    const media = isVideo
-      ? `<video src="${p.url}" controls playsinline style="max-width:92%;max-height:65vh;border-radius:12px" onclick="event.stopPropagation()"></video>`
-      : `<img src="${p.url}" style="max-width:92%;max-height:65vh;border-radius:12px;object-fit:contain" onclick="event.stopPropagation()" draggable="false">`;
-    return `<div class="lightbox" onclick="S.lbIdx=-1;render()">
-      <button class="lb-close" onclick="event.stopPropagation();S.lbIdx=-1;render()">×</button>
-      <div class="lb-counter">${S.lbIdx+1} / ${n}</div>
-      ${media}
-      <div class="lb-info">
-        <div style="font-size:14px;font-weight:600">${me?'📱 ':''}${esc(p.user)}${me?` <span class="badge badge-you">${t('you')}</span>`:''}</div>
-        <div style="font-size:12px;margin-top:4px;opacity:.7">${isVideo?'🎬 Video · ':''}${ago(p.ts)}</div>
-      </div>
-      <div class="lb-nav">
-        ${S.lbIdx>0?`<button class="btn-small" onclick="event.stopPropagation();S.lbIdx--;render()">←</button>`:''}
-        <button class="dl-btn" onclick="event.stopPropagation();dlOne(${S.lbIdx})">⬇ ${t('dlOne')}</button>
-        ${me?`<button class="btn-small" style="background:rgba(239,68,68,0.2);color:#ef4444" onclick="event.stopPropagation();deleteMedia('${p.id}')">🗑 ${t('deleteMedia')}</button>`:''}
-        ${S.lbIdx<n-1?`<button class="btn-small" onclick="event.stopPropagation();S.lbIdx++;render()">→</button>`:''}
-      </div>
-    </div>`;
-  })() : '';
+  // Lightbox artık ayrı overlay olarak render ediliyor (_renderLightbox)
+  const lb = '';
 
   const selBar = S.selectMode ? `<div class="select-bar">
     <div>
-      <span class="count">${selCount} ${t('selected')}</span>
+      <span class="count" data-sel-count>${selCount} ${t('selected')}</span>
       <button class="dl-btn-ghost" style="margin-left:8px;padding:6px 12px;font-size:11px" onclick="selAll()">${t('selectAll')}</button>
     </div>
     <div class="actions">
       <button class="dl-btn-ghost" onclick="exitSel()">${t('cancel')}</button>
-      <button class="dl-btn" onclick="dlSelected()" ${selCount===0?'disabled':''}>⬇ ${t('dlSelected')}</button>
+      <button class="dl-btn" data-sel-dlbtn onclick="dlSelected()" ${selCount===0?'disabled':''}>⬇ ${t('dlSelected')}</button>
     </div>
   </div>` : '';
 
@@ -743,7 +801,7 @@ function pgGallery() {
         <button class="btn-icon" onclick="${S.selectMode?'exitSel()':"nav('home')"}" style="width:34px;height:34px;font-size:14px">${S.selectMode?'✕':'←'}</button>
         <div>
           <div style="font-size:15px;font-weight:700">${S.selectMode?t('select'):esc(ev.name)}</div>
-          <div style="font-size:11px;color:var(--accent);font-weight:600">${S.selectMode?selCount+' '+t('selected'):S.code+' · '+(S.role==='host'?'Organizatör':u)}</div>
+          <div data-sel-sub style="font-size:11px;color:var(--accent);font-weight:600">${S.selectMode?selCount+' '+t('selected'):S.code+' · '+(S.role==='host'?t('organizer'):u)}</div>
         </div>
       </div>
       ${S.selectMode?'':`<button class="btn-icon" onclick="S.showQR=!S.showQR;render()" style="${S.showQR?'background:rgba(249,115,22,.15);color:var(--accent)':''}">${S.showQR?'✕':'⊞'}</button>`}
@@ -787,13 +845,38 @@ function cpCode() {
 function updC() { const b=document.getElementById('cb'); if(!b)return; b.disabled=!S.eName.trim(); b.style.opacity=S.eName.trim()?'1':'.4'; }
 function updJ() { const b=document.getElementById('jb'); if(!b)return; b.disabled=!S.jCode.trim(); b.style.opacity=S.jCode.trim()?'1':'.4'; }
 
-function enterSel() { S.selectMode=true; S.selected=new Set(); render(); }
-function exitSel()  { S.selectMode=false; S.selected=new Set(); render(); }
-function toggleSel(id) { if(S.selected.has(id)) S.selected.delete(id); else S.selected.add(id); render(); }
+function enterSel() { S.selectMode=true; S.selected=new Set(); renderNow(); }
+function exitSel()  { S.selectMode=false; S.selected=new Set(); renderNow(); }
+
+function _patchSelUI() {
+  // Update each card's classes without touching innerHTML
+  document.querySelectorAll('.photo-card[data-id]').forEach(card => {
+    const id = card.dataset.id;
+    const chosen = S.selected.has(id);
+    card.classList.toggle('chosen', chosen);
+    const chk = card.querySelector('.sel-check');
+    if (chk) { chk.classList.toggle('on', chosen); chk.textContent = chosen ? '✓' : ''; }
+  });
+  // Update select bar count + button state
+  const count = S.selected.size;
+  const countEl = document.querySelector('[data-sel-count]');
+  if (countEl) countEl.textContent = `${count} ${t('selected')}`;
+  const dlBtn = document.querySelector('[data-sel-dlbtn]');
+  if (dlBtn) dlBtn.disabled = count === 0;
+  const sub = document.querySelector('[data-sel-sub]');
+  if (sub) sub.textContent = `${count} ${t('selected')}`;
+}
+
+function toggleSel(id) {
+  if (S.selected.has(id)) S.selected.delete(id); else S.selected.add(id);
+  _patchSelUI();
+}
+
 function selAll() {
   const list = S.filter==='mine' ? S.photos.filter(p=>p.user===user()) : S.photos;
-  if(S.selected.size===list.length) S.selected=new Set(); else S.selected=new Set(list.map(p=>p.id));
-  render();
+  if (S.selected.size === list.length) S.selected = new Set();
+  else S.selected = new Set(list.map(p=>p.id));
+  _patchSelUI();
 }
 
 async function doCreate() {
@@ -835,7 +918,7 @@ function enterGuest() { setSavedName(S.uName); nav('gallery'); }
 
 async function openEv(code) {
   S.code = code; S.role = 'host';
-  S.hName = getRecentEvents().find(e=>e.code===code)?.host || '';
+  S.hName = getRecentEvents().find(e=>e.code===code)?.host || getSavedName();
   S.eventData = null;
   await nav('gallery');
 }
@@ -893,9 +976,9 @@ function bind() {
   document.onkeydown = e => {
     if (S.lbIdx<0) return;
     const n = S.photos.length;
-    if (e.key==='Escape')                           { S.lbIdx=-1; render(); }
-    else if (e.key==='ArrowLeft'  && S.lbIdx>0)    { S.lbIdx--; render(); }
-    else if (e.key==='ArrowRight' && S.lbIdx<n-1)  { S.lbIdx++; render(); }
+    if (e.key==='Escape')                           { closeLightbox(); }
+    else if (e.key==='ArrowLeft'  && S.lbIdx>0)    { lbNav(-1); }
+    else if (e.key==='ArrowRight' && S.lbIdx<n-1)  { lbNav(1); }
   };
 }
 
