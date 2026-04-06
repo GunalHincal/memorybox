@@ -3,8 +3,9 @@
 ════════════════════════════════════════════ */
 const SUPABASE_URL = 'https://lqimqbexaarknuabmmjf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_TmfmDmudcmSPRSz0M6M70Q_4HL7jO4P';
-const BUCKET = 'memorybox-media';
+const BUCKET = 'memorypocket-media';
 const TTL_MS = 72 * 60 * 60 * 1000; // 72 saat
+const APP_URL = 'https://memorypocket.vercel.app';
 
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -14,7 +15,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 ════════════════════════════════════════════ */
 const L = {
   tr: {
-    appName:'MemoryBox', tagline:'Etkinliğinin tüm anları, bir kutuda',
+    appName:'MemoryPocket', tagline:'Etkinliğinin tüm anları, bir kutuda',
     createEvent:'Etkinlik Oluştur', joinEvent:'Etkinliğe Katıl',
     eventName:'Etkinlik Adı', eventNamePH:'ör: Ayşe & Mehmet Düğünü',
     hostName:'Adınız', hostNamePH:'Medyanız bu isimle görünecek',
@@ -44,10 +45,12 @@ const L = {
     uploadingN:'Yükleniyor: ',
     shareEvent:'Etkinliği Paylaş', deleteEvent:'Etkinliği Sil',
     deleteConfirm:'Bu etkinliği ve tüm medyayı silmek istediğinden emin misin?',
-    deleted:'Etkinlik silindi!', shareText:'MemoryBox\'ta "{name}" etkinliğine katılmak için kod: {code}\n🔗 memorybox.vercel.app',
+    deleted:'Etkinlik silindi!', shareText:'MemoryPocket\'ta "{name}" etkinliğine katılmak için kod: {code}\n🔗 https://memorypocket.vercel.app',
+    deleteMediaConfirm:'Bu medyayı silmek istediğinden emin misin?',
+    mediaDeleted:'Silindi ✓', deleteMedia:'Sil', organizer:'Organizatör',
   },
   en: {
-    appName:'MemoryBox', tagline:'Every moment from your event, in one box',
+    appName:'MemoryPocket', tagline:'Every moment from your event, in one box',
     createEvent:'Create Event', joinEvent:'Join Event',
     eventName:'Event Name', eventNamePH:'e.g: Sarah & John\'s Wedding',
     hostName:'Your Name', hostNamePH:'Your media will show this name',
@@ -77,7 +80,9 @@ const L = {
     uploadingN:'Uploading: ',
     shareEvent:'Share Event', deleteEvent:'Delete Event',
     deleteConfirm:'Are you sure you want to delete this event and all media?',
-    deleted:'Event deleted!', shareText:'Join "{name}" on MemoryBox! Code: {code}\n🔗 memorybox.vercel.app',
+    deleted:'Event deleted!', shareText:'Join "{name}" on MemoryPocket! Code: {code}\n🔗 https://memorypocket.vercel.app',
+    deleteMediaConfirm:'Are you sure you want to delete this media?',
+    mediaDeleted:'Deleted ✓', deleteMedia:'Delete', organizer:'Organizer',
   }
 };
 
@@ -91,7 +96,7 @@ const CCOLORS = ['#f97316','#ec4899','#8b5cf6','#10b981','#f59e0b','#3b82f6'];
 let S = {
   lang: 'tr',
   screen: 'home',
-  eName: '', hName: '', uName: '',
+  eName: '', hName: getSavedName(), uName: getSavedName(),
   eType: 0,
   code: '',
   jCode: '',
@@ -114,7 +119,7 @@ let realtimeChannel = null;
    UTILITIES
 ════════════════════════════════════════════ */
 function t(k) { return L[S.lang][k] || k; }
-function user() { return S.role === 'host' ? (S.hName || 'Organizatör') : (S.uName || (S.lang === 'tr' ? 'Misafir' : 'Guest')); }
+function user() { return S.role === 'host' ? (S.hName || t('organizer')) : (S.uName || (S.lang === 'tr' ? 'Misafir' : 'Guest')); }
 function esc(s) { return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function ago(ts) { const m = Math.floor((Date.now() - ts) / 60000); return m < 1 ? t('justNow') : m + ' ' + t('minAgo'); }
 function stg(i) { return `animation:fadeIn .5s ease ${i * .08}s both`; }
@@ -140,6 +145,16 @@ function toast(msg, err) {
 function qrImg(val, sz) {
   const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sz}x${sz}&data=${encodeURIComponent(val)}&bgcolor=ffffff&color=1a1a2e&qzone=2`;
   return `<img src="${url}" width="${sz}" height="${sz}" style="border-radius:12px;display:block" alt="QR">`;
+}
+
+/* ════════════════════════════════════════════
+   DEVICE IDENTITY
+════════════════════════════════════════════ */
+function getSavedName() {
+  return localStorage.getItem('mb_saved_name') || '';
+}
+function setSavedName(name) {
+  if (name && name.trim()) localStorage.setItem('mb_saved_name', name.trim());
 }
 
 /* ════════════════════════════════════════════
@@ -225,7 +240,19 @@ function subscribeToGallery() {
           setTimeout(() => { const f = S.photos.find(p => p.id === item.id); if (f) f._new = false; }, 1500);
         }
       }
-    ).subscribe();
+    )
+    .on('postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'media', filter: `event_code=eq.${S.code}` },
+      (payload) => {
+        const deletedId = payload.old?.id;
+        if (!deletedId) return;
+        S.photos = S.photos.filter(p => p.id !== deletedId);
+        if (S.selected.has(deletedId)) { S.selected.delete(deletedId); }
+        if (S.lbIdx >= S.photos.length) S.lbIdx = S.photos.length - 1;
+        render();
+      }
+    )
+    .subscribe();
 }
 
 function unsubscribeFromGallery() {
@@ -252,13 +279,13 @@ async function shareEvent(code) {
   const ev = getRecentEvents().find(e => e.code === code);
   const name = ev?.name || code;
   const text = t('shareText').replace('{name}', name).replace('{code}', code);
-  const url = `https://memorybox.vercel.app`;
+  const url = `https://memorypocket.vercel.app`;
 
   try {
     if (navigator.share) {
-      await navigator.share({ title: 'MemoryBox — ' + name, text, url });
+      await navigator.share({ title: 'MemoryPocket — ' + name, text, url: APP_URL });
     } else {
-      await navigator.clipboard.writeText(text + '\n' + url);
+      await navigator.clipboard.writeText(text + '\n' + APP_URL);
       toast(t('copied'));
     }
   } catch(e) {
@@ -402,12 +429,12 @@ async function confirmDownload(quality) {
 async function deleteMedia(id) {
   const p = S.photos.find(ph => ph.id === id);
   if (!p || p.user !== user()) return;
-  if (!confirm('Bu medyayı silmek istediğinden emin misin?')) return;
+  if (!confirm(t('deleteMediaConfirm'))) return;
   await sb.storage.from(BUCKET).remove([p.storagePath]);
   await sb.from('media').delete().eq('id', id);
   S.photos = S.photos.filter(ph => ph.id !== id);
   if (S.lbIdx >= S.photos.length) S.lbIdx = S.photos.length - 1;
-  toast('Silindi ✓');
+  toast(t('mediaDeleted'));
   render();
 }
 
@@ -415,13 +442,13 @@ function dlOne(idx) {
   const p = S.photos[idx];
   if (!p) return;
   const ext = p.fileType === 'video' ? '.mp4' : '.jpg';
-  showDlSheet([{ url: p.url, filename: `memorybox_${S.code}_${idx + 1}${ext}`, fileType: p.fileType }]);
+  showDlSheet([{ url: p.url, filename: `memorypocket_${S.code}_${idx + 1}${ext}`, fileType: p.fileType }]);
 }
 
 function dlSelected() {
   const items = S.photos.filter(p => S.selected.has(p.id)).map((p, i) => {
     const ext = p.fileType === 'video' ? '.mp4' : '.jpg';
-    return { url: p.url, filename: `memorybox_${S.code}_sel_${i+1}${ext}`, fileType: p.fileType };
+    return { url: p.url, filename: `memorypocket_${S.code}_sel_${i+1}${ext}`, fileType: p.fileType };
   });
   showDlSheet(items);
 }
@@ -429,7 +456,7 @@ function dlSelected() {
 function dlAll() {
   const items = S.photos.map((p, i) => {
     const ext = p.fileType === 'video' ? '.mp4' : '.jpg';
-    return { url: p.url, filename: `memorybox_${S.code}_${i+1}${ext}`, fileType: p.fileType };
+    return { url: p.url, filename: `memorypocket_${S.code}_${i+1}${ext}`, fileType: p.fileType };
   });
   showDlSheet(items);
 }
@@ -437,7 +464,20 @@ function dlAll() {
 /* ════════════════════════════════════════════
    RENDER ENGINE
 ════════════════════════════════════════════ */
+let _rafId = null;
 function render() {
+  if (_rafId) return; // already scheduled — batch multiple rapid calls into one frame
+  _rafId = requestAnimationFrame(() => {
+    _rafId = null;
+    document.getElementById('app').innerHTML = ({
+      home: pgHome, create: pgCreate, created: pgCreated,
+      join: pgJoin, joinName: pgJoinName, gallery: pgGallery,
+    }[S.screen] || pgHome)();
+    bind();
+  });
+}
+function renderNow() {
+  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
   document.getElementById('app').innerHTML = ({
     home: pgHome, create: pgCreate, created: pgCreated,
     join: pgJoin, joinName: pgJoinName, gallery: pgGallery,
@@ -525,7 +565,7 @@ function pgCreate() {
 function pgCreated() {
   const ev = S.eventData;
   const conf = Array.from({length:14},(_,i)=>`<div style="position:absolute;top:-20px;left:${5+i*7}%;width:8px;height:8px;background:${CCOLORS[i%6]};border-radius:${i%2?'2px':'50%'};animation:confetti ${2+Math.random()*2}s ease ${Math.random()*.6}s forwards;pointer-events:none"></div>`).join('');
-  const qrUrl = `https://memorybox.vercel.app/join/${S.code}`;
+  const qrUrl = `${APP_URL}?join=${S.code}`;
   return `<div class="page" style="padding:20px 24px;text-align:center;position:relative;overflow:hidden">
     ${conf}
     <div style="font-size:48px;margin-top:40px;margin-bottom:16px;animation:scaleIn .5s ease">🎉</div>
@@ -637,7 +677,7 @@ function pgGallery() {
     </div>`;
   };
 
-  const qrUrl = `https://memorybox.vercel.app/join/${S.code}`;
+  const qrUrl = `${APP_URL}?join=${S.code}`;
   const qr = S.showQR ? `<div class="qr-panel">
     <div class="qr-wrap">${qrImg(qrUrl, 140)}</div>
     <div onclick="cpCode()" style="margin-top:12px;font-size:22px;font-weight:800;color:var(--accent);letter-spacing:.12em;cursor:pointer;font-family:'Outfit',monospace">${S.code}</div>
@@ -672,7 +712,7 @@ function pgGallery() {
       <div class="lb-nav">
         ${S.lbIdx>0?`<button class="btn-small" onclick="event.stopPropagation();S.lbIdx--;render()">←</button>`:''}
         <button class="dl-btn" onclick="event.stopPropagation();dlOne(${S.lbIdx})">⬇ ${t('dlOne')}</button>
-        ${me?`<button class="btn-small" style="background:rgba(239,68,68,0.2);color:#ef4444" onclick="event.stopPropagation();deleteMedia('${p.id}')">🗑 Sil</button>`:''}
+        ${me?`<button class="btn-small" style="background:rgba(239,68,68,0.2);color:#ef4444" onclick="event.stopPropagation();deleteMedia('${p.id}')">🗑 ${t('deleteMedia')}</button>`:''}
         ${S.lbIdx<n-1?`<button class="btn-small" onclick="event.stopPropagation();S.lbIdx++;render()">→</button>`:''}
       </div>
     </div>`;
@@ -733,10 +773,10 @@ async function nav(s) {
   if (s === 'gallery') {
     S.loading = true;
     S.photos = S.eventData?.code === S.code ? S.photos : [];
-    render(); scrollTo(0, 0);
+    renderNow(); scrollTo(0, 0);
     await loadGallery();
-    S.loading = false; render();
-  } else { render(); scrollTo(0, 0); }
+    S.loading = false; renderNow();
+  } else { renderNow(); scrollTo(0, 0); }
 }
 
 function cpCode() {
@@ -768,6 +808,7 @@ async function doCreate() {
   S.loading = false;
   if (error) { toast(t('connErr'), true); render(); return; }
   S.eventData = data; S.photos = [];
+  setSavedName(S.hName);
   saveRecentEvent(data, 0);
   nav('created'); toast(t('created'));
 }
@@ -790,7 +831,7 @@ async function doJoin() {
   nav('joinName');
 }
 
-function enterGuest() { nav('gallery'); }
+function enterGuest() { setSavedName(S.uName); nav('gallery'); }
 
 async function openEv(code) {
   S.code = code; S.role = 'host';
@@ -861,4 +902,14 @@ function bind() {
 /* ════════════════════════════════════════════
    INIT
 ════════════════════════════════════════════ */
-render();
+(async () => {
+  const joinParam = new URLSearchParams(location.search).get('join');
+  if (joinParam) {
+    S.jCode = joinParam.toUpperCase();
+    // Clean up the URL without reloading
+    history.replaceState(null, '', location.pathname);
+    await doJoin();
+  } else {
+    render();
+  }
+})();

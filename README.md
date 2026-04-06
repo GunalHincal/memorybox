@@ -1,4 +1,4 @@
-# 📸 MemoryBox
+# 📸 MemoryPocket
 
 **🇹🇷 Türkçe** | [🇬🇧 English](#-english)
 
@@ -8,11 +8,11 @@
 
 ### Etkinliğinin tüm anları, bir kutuda.
 
-MemoryBox, düğün, doğum günü, mezuniyet gibi özel etkinliklerde herkesin çektiği fotoğraf ve videoları tek bir paylaşımlı galeride toplar. Uygulama indirmeye gerek yok — sadece QR okut veya kodu gir, yükle, indir.
+MemoryPocket, düğün, doğum günü, mezuniyet gibi özel etkinliklerde herkesin çektiği fotoğraf ve videoları tek bir paylaşımlı galeride toplar. Uygulama indirmeye gerek yok — sadece QR okut veya kodu gir, yükle, indir.
 
 ### 🚀 Canlı Uygulama
 
-**[memorybox.vercel.app](https://memorybox.vercel.app)**
+**[memorypocket.vercel.app](https://memorypocket.vercel.app)**
 
 ---
 
@@ -95,11 +95,11 @@ Supabase kurulumu için `supabase-setup.sql` dosyasını Supabase SQL Editor'da 
 
 ### Every moment from your event, in one box.
 
-MemoryBox is a shared photo and video gallery for special events — weddings, birthdays, graduations and more. No app download needed. Just scan the QR or enter the code, upload and download.
+MemoryPocket is a shared photo and video gallery for special events — weddings, birthdays, graduations and more. No app download needed. Just scan the QR or enter the code, upload and download.
 
 ### 🚀 Live App
 
-**[memorybox.vercel.app](https://memorybox.vercel.app)**
+**[memorypocket.vercel.app](https://memorypocket.vercel.app)**
 
 ---
 
@@ -179,7 +179,6 @@ Run `supabase-setup.sql` in your Supabase SQL Editor to set up the database.
 ### 📄 License
 
 © 2025 Günal Hıncal. All rights reserved.
-
 
 ---
 

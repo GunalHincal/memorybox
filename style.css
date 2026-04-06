@@ -60,6 +60,7 @@ body { display: flex; justify-content: center; }
   position:relative; overflow:hidden;
 }
 .btn-primary:active { transform:scale(0.97); }
+.btn-primary, .btn-secondary, .btn-back, .btn-icon, .btn-small, .fab, .ftab, .dl-btn, .dl-btn-ghost, .dl-opt, .type-btn { touch-action: manipulation; }
 .btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
 .btn-primary::after {
   content:''; position:absolute; inset:0;
@@ -155,14 +156,18 @@ input.shake { animation:shake 0.3s ease; border-color:var(--danger) !important; 
 /* ═══════════════════════════════════════════
    MASONRY GALLERY
 ══════════════════════════════════════════ */
-.masonry { display:flex; gap:8px; padding:8px 12px; }
+.masonry { display:flex; gap:8px; padding:8px 12px; contain:layout style; }
 .masonry-col { flex:1; display:flex; flex-direction:column; gap:8px; }
 
 .photo-card {
   border-radius:14px; overflow:hidden; cursor:pointer;
   position:relative; transition:transform 0.2s;
+  transform: translateZ(0);       /* promote to GPU layer — prevents repaint flash */
+  will-change: transform;
+  touch-action: manipulation;     /* eliminate 300ms tap delay on mobile */
+  -webkit-backface-visibility: hidden;
 }
-.photo-card:active { transform:scale(0.97); }
+.photo-card:active { transform:scale(0.97) translateZ(0); }
 .photo-card.fresh { animation:newPhoto 1.2s ease; }
 
 .photo-card img {
