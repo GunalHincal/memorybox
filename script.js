@@ -50,6 +50,10 @@ const L = {
     mediaDeleted:'Silindi ✓', deleteMedia:'Sil', organizer:'Organizatör',
     continueAs:'Bu kişi olarak devam et', joinDiffName:'Farklı bir isimle katıl',
     joinAsNew:'Bu isimle katıl', sameNameHint:'Farklı cihazlardan aynı ismi kullanarak aynı kişi olarak görünürsün.',
+    deleteSelectedConfirm:'{n} medyayı silmek istediğinden emin misin?',
+    deleteSelectedPartial:'{n} medyan silinecek ({o} başkasına ait, atlanacak). Devam edilsin mi?',
+    cantDeleteOthers:'Sadece kendi yüklediğin medyaları silebilirsin.',
+    youreHost:'Organizatör olarak devam et',
   },
   en: {
     appName:'MemoryPocket', tagline:'Every moment from your event, in one box',
@@ -87,6 +91,10 @@ const L = {
     mediaDeleted:'Deleted ✓', deleteMedia:'Delete', organizer:'Organizer',
     continueAs:'Continue as this person', joinDiffName:'Join with a different name',
     joinAsNew:'Join with this name', sameNameHint:'Use the same name on any device to appear as the same person.',
+    deleteSelectedConfirm:'Delete {n} items?',
+    deleteSelectedPartial:'Delete {n} of your items? ({o} belong to others, skipped)',
+    cantDeleteOthers:'You can only delete your own uploads.',
+    youreHost:'Continue as organizer',
   }
 };
 
@@ -428,8 +436,28 @@ async function confirmDownload(quality) {
 }
 
 /* ════════════════════════════════════════════
-   DELETE MEDIA (kendi medyası)
+   DELETE MEDIA
 ════════════════════════════════════════════ */
+async function deleteSelected() {
+  const u = user();
+  const mine = S.photos.filter(p => S.selected.has(p.id) && p.user === u);
+  if (!mine.length) { toast(t('cantDeleteOthers'), true); return; }
+  const otherCount = [...S.selected].length - mine.length;
+  const msg = otherCount > 0
+    ? t('deleteSelectedPartial').replace('{n}', mine.length).replace('{o}', otherCount)
+    : t('deleteSelectedConfirm').replace('{n}', mine.length);
+  if (!confirm(msg)) return;
+
+  const paths = mine.map(p => p.storagePath);
+  const ids   = mine.map(p => p.id);
+  await sb.storage.from(BUCKET).remove(paths);
+  await sb.from('media').delete().in('id', ids);
+  S.photos = S.photos.filter(p => !ids.includes(p.id));
+  S.selected = new Set();
+  exitSel();
+  toast(`${ids.length} ${t('mediaDeleted')}`);
+}
+
 async function deleteMedia(id) {
   const p = S.photos.find(ph => ph.id === id);
   if (!p || p.user !== user()) return;
@@ -669,6 +697,8 @@ function pgJoin() {
 function pgJoinName() {
   const ev = S.eventData;
   const saved = getSavedName();
+  const isHost = saved && ev && saved === ev.host;
+
   return `<div class="page" style="padding:20px 24px">
     <button class="btn-back" onclick="nav('join')">← ${t('back')}</button>
     <div style="text-align:center;margin:32px 0">
@@ -677,11 +707,11 @@ function pgJoinName() {
       <div style="font-size:13px;color:var(--accent);font-weight:600">${S.code}</div>
     </div>
     ${saved ? `
-      <div class="identity-card" onclick="S.uName='${esc(saved)}';enterGuest()">
+      <div class="identity-card ${isHost?'identity-host':''}" onclick="enterWithIdentity('${esc(saved)}')">
         <div class="identity-avatar">${saved.charAt(0).toUpperCase()}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(saved)}</div>
-          <div style="font-size:11px;color:var(--text-soft);margin-top:2px">${t('continueAs')}</div>
+          <div style="font-size:11px;color:var(--text-soft);margin-top:2px">${isHost ? t('youreHost') : t('continueAs')}</div>
         </div>
         <div style="color:var(--accent);font-size:18px;font-weight:700">→</div>
       </div>
@@ -694,14 +724,14 @@ function pgJoinName() {
         <label class="label">${t('joinDiffName')}</label>
         <input type="text" id="iu" value="" placeholder="${t('yourNamePH')}" oninput="S.uName=this.value">
       </div>
-      <button class="btn-secondary" style="margin-top:8px" onclick="if(document.getElementById('iu').value.trim()){S.uName=document.getElementById('iu').value.trim();enterGuest();}">${t('joinAsNew')}</button>
+      <button class="btn-secondary" style="margin-top:8px" onclick="const n=document.getElementById('iu').value.trim();if(n)enterWithIdentity(n)">${t('joinAsNew')}</button>
     ` : `
       <div style="margin-bottom:8px">
         <label class="label">${t('yourName')}</label>
         <input type="text" id="iu" value="${esc(S.uName)}" placeholder="${t('yourNamePH')}" oninput="S.uName=this.value">
       </div>
       <div style="font-size:11px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">💡 ${t('sameNameHint')}</div>
-      <button class="btn-primary" onclick="if(S.uName.trim())enterGuest()">${t('join')} →</button>
+      <button class="btn-primary" onclick="const n=document.getElementById('iu').value.trim();if(n)enterWithIdentity(n)">${t('join')} →</button>
     `}
   </div>`;
 }
@@ -751,7 +781,6 @@ function pgGallery() {
     }
     return `<div class="photo-card ${p._new?'fresh':''}" data-id="${p.id}" style="${stg(i)}" onclick="openLightbox(${idx})">
       ${thumb}${overlay}
-      ${me ? `<button class="del-btn" onclick="event.stopPropagation();deleteMedia('${p.id}')" title="Sil">🗑</button>` : ''}
     </div>`;
   };
 
@@ -776,29 +805,21 @@ function pgGallery() {
   // Lightbox artık ayrı overlay olarak render ediliyor (_renderLightbox)
   const lb = '';
 
-  const selBar = S.selectMode ? `<div class="select-bar">
-    <div>
-      <span class="count" data-sel-count>${selCount} ${t('selected')}</span>
-      <button class="dl-btn-ghost" style="margin-left:8px;padding:6px 12px;font-size:11px" onclick="selAll()">${t('selectAll')}</button>
-    </div>
-    <div class="actions">
-      <button class="dl-btn-ghost" onclick="exitSel()">${t('cancel')}</button>
-      <button class="dl-btn" data-sel-dlbtn onclick="dlSelected()" ${selCount===0?'disabled':''}>⬇ ${t('dlSelected')}</button>
-    </div>
-  </div>` : '';
+  // Select bar is injected by _applySelMode, not rendered here
+  const selBar = '';
 
-  const fabArea = S.selectMode ? '' : `<div class="fab-wrap" style="display:flex;gap:10px">
-    <button class="fab" onclick="document.getElementById('fileInput').click()">📷 ${t('upload')}</button>
+  const fabArea = S.selectMode ? '' : `<div class="fab-wrap">
+    <button class="fab" onclick="document.getElementById('fileInput').click()">📷 ${S.lang==='tr'?'Yükle':'Upload'}</button>
     ${all.length > 0 ? `
-      <button class="fab" onclick="enterSel()" style="background:rgba(255,255,255,0.12);box-shadow:0 4px 16px rgba(0,0,0,.3);padding:16px" title="${t('select')}">☑</button>
-      <button class="fab" onclick="dlAll()" style="background:rgba(255,255,255,0.12);box-shadow:0 4px 16px rgba(0,0,0,.3);padding:16px" title="${t('dlAll')}">⬇</button>
+      <button class="fab-icon" onclick="enterSel()" title="${t('select')}">☑</button>
+      <button class="fab-icon" onclick="dlAll()" title="${t('dlAll')}">⬇</button>
     ` : ''}
   </div>`;
 
   return `<div class="page">
     <div class="gal-header">
       <div style="display:flex;align-items:center;gap:12px">
-        <button class="btn-icon" onclick="${S.selectMode?'exitSel()':"nav('home')"}" style="width:34px;height:34px;font-size:14px">${S.selectMode?'✕':'←'}</button>
+        <button class="btn-icon" data-gal-back onclick="${S.selectMode?'exitSel()':"nav('home')"}" style="width:34px;height:34px;font-size:14px">${S.selectMode?'✕':'←'}</button>
         <div>
           <div style="font-size:15px;font-weight:700">${S.selectMode?t('select'):esc(ev.name)}</div>
           <div data-sel-sub style="font-size:11px;color:var(--accent);font-weight:600">${S.selectMode?selCount+' '+t('selected'):S.code+' · '+(S.role==='host'?t('organizer'):u)}</div>
@@ -845,11 +866,90 @@ function cpCode() {
 function updC() { const b=document.getElementById('cb'); if(!b)return; b.disabled=!S.eName.trim(); b.style.opacity=S.eName.trim()?'1':'.4'; }
 function updJ() { const b=document.getElementById('jb'); if(!b)return; b.disabled=!S.jCode.trim(); b.style.opacity=S.jCode.trim()?'1':'.4'; }
 
-function enterSel() { S.selectMode=true; S.selected=new Set(); renderNow(); }
-function exitSel()  { S.selectMode=false; S.selected=new Set(); renderNow(); }
+function enterSel() {
+  S.selectMode = true;
+  S.selected = new Set();
+  _applySelMode(true);
+}
+
+function exitSel() {
+  S.selectMode = false;
+  S.selected = new Set();
+  _applySelMode(false);
+}
+
+function _applySelMode(entering) {
+  const u = user();
+
+  // 1. Each photo card: add/remove sel-mode class and sel-check
+  document.querySelectorAll('.photo-card[data-id]').forEach(card => {
+    const id = card.dataset.id;
+    if (entering) {
+      card.classList.add('sel-mode');
+      card.classList.remove('chosen');
+      card.onclick = () => toggleSel(id);
+      if (!card.querySelector('.sel-check')) {
+        const chk = document.createElement('div');
+        chk.className = 'sel-check';
+        card.prepend(chk);
+      }
+    } else {
+      card.classList.remove('sel-mode', 'chosen');
+      const idx = S.photos.findIndex(p => p.id === id);
+      card.onclick = () => openLightbox(idx);
+      card.querySelector('.sel-check')?.remove();
+    }
+  });
+
+  // 2. FAB ↔ SelectBar swap (no page re-render)
+  const fabWrap = document.querySelector('.fab-wrap');
+  let selBar = document.querySelector('.select-bar');
+
+  if (entering) {
+    if (fabWrap) fabWrap.style.display = 'none';
+    if (!selBar) {
+      selBar = document.createElement('div');
+      selBar.className = 'select-bar';
+      selBar.innerHTML = `
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span class="count" data-sel-count>0 ${t('selected')}</span>
+          <button class="dl-btn-ghost" style="padding:6px 10px;font-size:11px" onclick="selAll()">${t('selectAll')}</button>
+        </div>
+        <div class="actions">
+          <button class="dl-btn-ghost" onclick="exitSel()">${t('cancel')}</button>
+          <button class="dl-btn" data-sel-delbtn style="background:rgba(239,68,68,0.85);box-shadow:none" onclick="deleteSelected()" disabled>🗑</button>
+          <button class="dl-btn" data-sel-dlbtn onclick="dlSelected()" disabled>⬇ ${t('dlSelected')}</button>
+        </div>`;
+      document.getElementById('app').appendChild(selBar);
+    }
+    const masonry = document.querySelector('.masonry');
+    if (masonry) masonry.style.paddingBottom = '140px';
+  } else {
+    if (fabWrap) fabWrap.style.display = '';
+    selBar?.remove();
+    const masonry = document.querySelector('.masonry');
+    if (masonry) masonry.style.paddingBottom = '100px';
+  }
+
+  // 3. Header subtitle
+  const sub = document.querySelector('[data-sel-sub]');
+  if (sub) {
+    if (entering) sub.textContent = `0 ${t('selected')}`;
+    else sub.textContent = `${S.code} · ${S.role === 'host' ? t('organizer') : u}`;
+  }
+
+  // 4. Header back button text+action
+  const backBtn = document.querySelector('[data-gal-back]');
+  if (backBtn) {
+    backBtn.textContent = entering ? '✕' : '←';
+    backBtn.onclick = entering ? exitSel : () => nav('home');
+  }
+}
 
 function _patchSelUI() {
-  // Update each card's classes without touching innerHTML
+  const count = S.selected.size;
+  const u = user();
+
   document.querySelectorAll('.photo-card[data-id]').forEach(card => {
     const id = card.dataset.id;
     const chosen = S.selected.has(id);
@@ -857,14 +957,22 @@ function _patchSelUI() {
     const chk = card.querySelector('.sel-check');
     if (chk) { chk.classList.toggle('on', chosen); chk.textContent = chosen ? '✓' : ''; }
   });
-  // Update select bar count + button state
-  const count = S.selected.size;
+
   const countEl = document.querySelector('[data-sel-count]');
   if (countEl) countEl.textContent = `${count} ${t('selected')}`;
-  const dlBtn = document.querySelector('[data-sel-dlbtn]');
-  if (dlBtn) dlBtn.disabled = count === 0;
+
   const sub = document.querySelector('[data-sel-sub]');
   if (sub) sub.textContent = `${count} ${t('selected')}`;
+
+  const dlBtn = document.querySelector('[data-sel-dlbtn]');
+  if (dlBtn) dlBtn.disabled = count === 0;
+
+  // Delete button: enabled only if any selected photo belongs to current user
+  const delBtn = document.querySelector('[data-sel-delbtn]');
+  if (delBtn) {
+    const canDelete = S.photos.some(p => S.selected.has(p.id) && p.user === u);
+    delBtn.disabled = !canDelete;
+  }
 }
 
 function toggleSel(id) {
@@ -873,9 +981,9 @@ function toggleSel(id) {
 }
 
 function selAll() {
-  const list = S.filter==='mine' ? S.photos.filter(p=>p.user===user()) : S.photos;
+  const list = S.filter === 'mine' ? S.photos.filter(p => p.user === user()) : S.photos;
   if (S.selected.size === list.length) S.selected = new Set();
-  else S.selected = new Set(list.map(p=>p.id));
+  else S.selected = new Set(list.map(p => p.id));
   _patchSelUI();
 }
 
@@ -914,7 +1022,22 @@ async function doJoin() {
   nav('joinName');
 }
 
-function enterGuest() { setSavedName(S.uName); nav('gallery'); }
+// Tek giriş noktası: isim host ile eşleşiyorsa organizatör olarak gir
+function enterWithIdentity(name) {
+  name = (name || '').trim();
+  if (!name) return;
+  setSavedName(name);
+  if (S.eventData && name === S.eventData.host) {
+    S.role = 'host';
+    S.hName = name;
+  } else {
+    S.role = 'guest';
+    S.uName = name;
+  }
+  nav('gallery');
+}
+
+function enterGuest() { enterWithIdentity(S.uName); }
 
 async function openEv(code) {
   S.code = code; S.role = 'host';
